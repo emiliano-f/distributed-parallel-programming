@@ -5,22 +5,31 @@
 
 int global_variable = 0;
 
-void *thread_type1(void *str){
-    printf("Thread1 instancia %d\n", pthread_self());
-    struct timespec *sleep_time = (struct timespec*) str;
+void *thread_type1(void *id){
+    printf("Thread1 instancia %d\n", *((int*)id));
+    free(id); 
+    struct timespec sleep_time = {
+        .tv_sec = 0,
+        .tv_nsec = rand() % 1000000000 
+    };
 
     // Suspender la ejecución del hilo durante el tiempo especificado
-    struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = sleep_time };
+    struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = &sleep_time };
     nanosleep(&sleep_spec, NULL);
-
+    
+    printf("Tiempo %ld\n", sleep_time.tv_nsec);
     global_variable++;
 }
 
-void *thread_type2(void *str){
-    printf("Thread2 instancia %d\n", pthread_self());
-    struct timespec * sleep_time = (struct timespec*) str;
+void *thread_type2(void *id){
+    printf("Thread2 instancia %d\n", *((int *)(id)));
+    free(id);
+    struct timespec sleep_time = {
+        .tv_sec = 0,
+        .tv_nsec = rand() % 1000000000
+    };
 
-    struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = sleep_time };
+    struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = &sleep_time };
     nanosleep(&sleep_spec, NULL);
 
     printf("Valor variable global: %d\n", global_variable);
@@ -41,23 +50,20 @@ int main(int argc, char *argv[]) {
     // Creacion de hilos
     pthread_t threads_type1[n];
     pthread_t threads_type2[m];
-    
-    // Estructura timespec para el tiempo de suspensión
-    struct timespec sleep_time = {
-        .tv_sec = 0, 
-        .tv_nsec = 0
-    };
 
     int i = 0;
-    
-    for (i=0; i<n; i++){
-        sleep_time.tv_nsec = rand() % 1000000000;
-        pthread_create(&threads_type1[i], NULL, thread_type1, (void *)&sleep_time);
+    int* tmp;
+
+    for (i=0; i<n; i++){ 
+        tmp = (int*) malloc(sizeof(int));
+        *tmp = i;
+        pthread_create(&threads_type1[i], NULL, thread_type1,(void*)tmp);
     }
 
     for (i=0; i<m; i++){
-        sleep_time.tv_nsec = rand() % 1000000000;
-        pthread_create(&threads_type2[i], NULL, thread_type2, (void *)&sleep_time);
+        tmp = (int*) malloc(sizeof(int));
+        *tmp = i;
+        pthread_create(&threads_type2[i], NULL, thread_type2, (void*) tmp);
     }
 
     for (i = 0; i<n; i++){
