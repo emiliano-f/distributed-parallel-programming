@@ -3,6 +3,9 @@
 #include<pthread.h>
 #include<unistd.h>
 
+/* Construir n y m hilos que escriban y lean sobre una variable global */
+
+
 int global_variable = 0;
 
 void *thread_type1(void *id){
@@ -14,8 +17,8 @@ void *thread_type1(void *id){
     };
 
     // Suspender la ejecución del hilo durante el tiempo especificado
-    struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = &sleep_time };
-    nanosleep(&sleep_spec, NULL);
+    //struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = &sleep_time };
+    nanosleep(&sleep_time, NULL);
     
     printf("Tiempo %ld\n", sleep_time.tv_nsec);
     global_variable++;
@@ -29,8 +32,8 @@ void *thread_type2(void *id){
         .tv_nsec = rand() % 1000000000
     };
 
-    struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = &sleep_time };
-    nanosleep(&sleep_spec, NULL);
+    //struct timespec sleep_spec = { .tv_sec = 0, .tv_nsec = &sleep_time };
+    nanosleep(&sleep_time, NULL);
 
     printf("Valor variable global: %d\n", global_variable);
 }
