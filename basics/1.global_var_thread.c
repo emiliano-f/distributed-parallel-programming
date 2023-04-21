@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
     for (i=0; i<n; i++){ 
         tmp = (int*) malloc(sizeof(int));
         *tmp = i;
-        pthread_create(&threads_type1[i], NULL, thread_type1,(void*)tmp);
+        pthread_create(&threads_type1[i], NULL, thread_type1,(void*)atoi(i));
     }
 
     for (i=0; i<m; i++){
