@@ -11,34 +11,33 @@
 #define READ 0
 #define WRITE 1
 #define BUFFER_SIZE 256
-#define HIT_VALUE 7.0
+#define TARGET 7.5
 
-int become_player(int id, int fd[], int fd_player[], sem_t semaphore){
+int become_player(int id, int fd[], int fd_player[], sem_t *semaphore, sem_t *sem_croupier){
     
     // waiting for all process (desde while)
     char buffer[BUFFER_SIZE];
-    int score = 0, punt; 
+    float score = 0, punt = 0; 
     int in_game = TRUE;
     Response to_send;
     to_send.id = id;
     to_send.res = in_game;
-    int aaa;
-    sem_getvalue(&semaphore, &aaa);
-    printf("proceso %d, y mi semaforo vale %d\n", id, aaa);
 
     while (in_game){
-        printf("estoy aca uwu proceso %d\n", id);
-        if (sem_wait(&semaphore) == -1){
+        if (sem_wait(semaphore) == -1){
             fprintf(stderr, "error decrementing %d\n", id);
             exit(EXIT_FAILURE);
         }
-        printf("me liberaron %d\n", id);
         read(fd[READ], buffer, BUFFER_SIZE); 
-        punt = atoi(buffer);
-        printf("Proc %d, leido %f, total %f", id, punt, score + punt);
+        if (sem_post(sem_croupier) == -1) {
+            fprintf(stderr, "error liberando croupier %d\n", id);
+            exit(EXIT_FAILURE);
+        }
+        punt = atof(buffer);
+        printf("Proc %d, leido %f, total %f\n", id, punt, score + punt);
         score += punt;
 
-        if (score >= HIT_VALUE || HIT_VALUE - score <= 0.5){
+        if (score >= TARGET || TARGET - score <= 0.5){
             //no continua
             in_game = FALSE;
             to_send.res = in_game; 
@@ -48,7 +47,7 @@ int become_player(int id, int fd[], int fd_player[], sem_t semaphore){
             //continua
             write(fd_player[WRITE], &to_send, sizeof(to_send));
         } 
-
+        printf("proceso %d en el juego: %d\n", id, in_game);
         memset(buffer, 0, BUFFER_SIZE);
 
     }

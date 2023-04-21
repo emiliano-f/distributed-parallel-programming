@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <semaphore.h>
+#include <math.h>
 #include "response.h"
 #include "croupier.h"
 
@@ -13,16 +14,16 @@
 
 #define TRUE 1
 #define FALSE 0
-#define AS 1
-#define DOS 2
-#define TRES 3
-#define CUATRO 4
-#define CINCO 5
-#define SEIS 6 
-#define SIETE 7
-#define SOTA 0.5
-#define CABALLO 0.5
-#define REY 0.5
+#define AS "1"
+#define DOS "2"
+#define TRES "3"
+#define CUATRO "4"
+#define CINCO "5"
+#define SEIS "6" 
+#define SIETE "7"
+#define SOTA "0.5"
+#define CABALLO "0.5"
+#define REY "0.5"
 #define TARGET 7.5
 
 struct linked_t {
@@ -38,41 +39,45 @@ void insert(struct linked_t **node, int id) {
     *node = new;
 }
     
-char *linked_to_string(struct linked_t *node){
-    // Para imprimir la linkedlist es mas eficient recorrerla en lugar de convertirla a string
-    // pero para aprender lo dejo así xd
-
-    char *str = (char *) malloc(sizeof(char));
-    char curr[4];
-    str[0] = '\0';
-    while (node != NULL){
-        sprintf(curr, "%d", node->winner);
-
-        // +1 para el \0 ya que strlen devuelve total sin \0
-        // esto es terriblemente ineficiente, ya que 
-        // realloc copia lo de str al nuevo bloque reservado
-        // (si es que no encuentra lugar a continuacion para expandir)
-        str = (char *)realloc(str, (strlen(str) + strlen(curr) + 1) * sizeof(char));
-        strcat(str, curr);
-        node = node->next;
+char *linked_to_string(struct linked_t *node) {
+    // Primero, contamos el tamaño total necesario para la cadena
+    int total_size = 0;
+    struct linked_t *curr = node;
+    while (curr != NULL) {
+        total_size += snprintf(NULL, 0, " %d", curr->winner); // Obtiene el tamaño de la cadena que se añadirá
+        curr = curr->next;
     }
+    
+    // A continuación, reservamos memoria suficiente para la cadena completa
+    char *str = malloc((total_size + 1) * sizeof(char)); // Añadimos 1 para el caracter nulo
+    str[0] = '\0'; // Inicializamos la cadena con un carácter nulo
+    
+    // Agregamos cada elemento de la lista a la cadena
+    curr = node;
+    while (curr != NULL) {
+        char curr_str[12]; // Suficiente para almacenar un número entero de 32 bits en decimal
+        snprintf(curr_str, sizeof(curr_str), " %d", curr->winner); // Convierte el número a una cadena de caracteres
+        strcat(str, curr_str); // Agrega la cadena al final de la cadena principal
+        curr = curr->next;
+    }
+    
     return str;
 }
 
-void free_linked(struct linked_t *node){
+void free_linked(struct linked_t **node){
     // liberar memoria es una operacion costosa
     // esta forma de implementar (liberar cada que actualizo 
     // el rad) es ineficiente
     void * tmp;
-    while (node != NULL){
-        tmp = node->next;
-        free(node);
-        node = tmp;
+    while (*node != NULL){
+        tmp = (*node)->next;
+        free(*node);
+        *node = tmp;
     }
 }
 
-int start_game(int n, int fd[], int fd_players[], pid_t pids[], sem_t semaphores[]){
-    float cards[10] = {AS, DOS, TRES, CUATRO, CINCO, SEIS,
+int start_game(int n, int fd[], int fd_players[], sem_t *semaphores[], sem_t *sem_croupier){
+    char *cards[10] = {AS, DOS, TRES, CUATRO, CINCO, SEIS,
                         SIETE, SOTA, CABALLO, REY};
     
     // Espera a que todos los procesos hayan iniciado
@@ -85,7 +90,7 @@ int start_game(int n, int fd[], int fd_players[], pid_t pids[], sem_t semaphores
     while (inc) {
         inc = FALSE;
         for (i=j; i<n; i++){
-            if (sem_getvalue(&semaphores[i], &value) == -1){
+            if (sem_getvalue(semaphores[i], &value) == -1){
                 fprintf(stderr, "error getting value %d\n", i);
                 exit(EXIT_FAILURE);
             }
@@ -115,45 +120,50 @@ int start_game(int n, int fd[], int fd_players[], pid_t pids[], sem_t semaphores
         // scores to zero
         scores[i] = 0;
     }
-    int aaa;
     while (players_in_game > 0) {
+        substract = 0;
         // give cards
         for (i=0; i<n; i++) {
             if (in_game[i]) {
                 pos_card = (rand() % (9 + 1));
-                write(fd[WRITE], &cards[pos_card], sizeof(int));
-                sem_getvalue(&semaphores[i], &aaa);
-                printf("croupier aca, %d, semaforo vale %d\n", i, aaa);
-                if (sem_post(&semaphores[i]) == -1) {
+                write(fd[WRITE], cards[pos_card], BUFFER_SIZE);
+                if (sem_post(semaphores[i]) == -1) {
                     fprintf(stderr, "error liberando proceso %d\n", i);
                     exit(EXIT_FAILURE);
                 }
-                sem_getvalue(&semaphores[i], &aaa);
-                printf("liberé a %d, y el semaforo vale %d\n", i, aaa);
-                scores[i] += cards[pos_card];
+                //printf("liberé a %d, y el puntaje que le di es %s\n", i, cards[pos_card]);
+                scores[i] += atof(cards[pos_card]);
+                if (sem_wait(sem_croupier) == -1){
+                    fprintf(stderr, "croupier error decrementing %d\n", i);
+                    exit(EXIT_FAILURE);
+                }
             }
         }
 
         // responses
         for (i=0; i<players_in_game; i++) {
-            printf("croupier esperando respuestas uwu %d\n", i);
-            read(fd_players[READ], buffer, BUFFER_SIZE);
+            read(fd_players[READ], buffer, sizeof(Response));
             rta = (Response *) buffer;
             in_game[rta->id] = rta->res;
-            if (rta->res) substract += 1;
+            if (!(rta->res)) substract += 1;
             memset(buffer, 0, BUFFER_SIZE);
         }
+        //printf("se retiraron %d jugadores, quedan %d\n", substract, players_in_game-substract);
         players_in_game -= substract;
     }
+
+    //scores
+    printf("scores: \n");
+    for (i=0; i<n; i++) printf("player %d: %f\n", i, scores[i]);
 
     // winner
     struct linked_t *winners = NULL;
     float tmp, rad = 7;
     for (i=0; i<n; i++){
-        tmp = abs(TARGET - scores[i]);
+        tmp = fabs(TARGET - scores[i]);
         if (tmp < rad) {
             rad = tmp;
-            free_linked(winners);
+            free_linked(&winners);
             insert(&winners, i);
         }
         else if (tmp == rad) {
@@ -162,8 +172,8 @@ int start_game(int n, int fd[], int fd_players[], pid_t pids[], sem_t semaphores
     }
     char* win = linked_to_string(winners);
     printf("Winner(s): %s\n", win);
-    //free(win);
-    free_linked(winners);
+    free(win);
+    free_linked(&winners);
 }
 
 
