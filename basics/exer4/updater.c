@@ -1,11 +1,24 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include "common.h"
+#include "structs.h"
+#include "queue.h"
+#include "updater.h"
 
 #define BUFFER_SIZE 128
+
+//Station station;
+//pthread_mutex_t station_lock;                                                   
+//pthread_cond_t station_cond;
 
 Vehicle read_vehicle(char* line){
     /* obtiene atributos de la linea leída */
 
     Vehicle vehicle;
+    // guardamos la linea para el archivo de salida
+    strcpy(vehicle.label, line);
     
     // DISCLAIMER: af muy barato
     char tmp[13]; 
@@ -27,17 +40,17 @@ Vehicle read_vehicle(char* line){
         line += 1;
     }
     switch (tmp[0]){
-        'm': 
+        case 'm': 
             vehicle.cat = MOTOCICLETA;
             break;
-        'c':
+        case 'c':
             vehicle.cat = COCHE;
-            break
-        'u':
-            vehicle.cat = UTILITARIOS;
             break;
-        'p':
-            vehicle.cat = PESADOS;
+        case 'u':
+            vehicle.cat = UTILITARIO;
+            break;
+        case 'p':
+            vehicle.cat = PESADO;
             break;
         default:
             printf("nave espacial");
@@ -56,7 +69,10 @@ Vehicle read_vehicle(char* line){
     return vehicle;
 }
 
-void *run_updater(){
+void *run_updater(void *things){
+    int *neof = ((Updater *) things)->neof;
+    pthread_mutex_t *neof_lock = ((Updater *) things)->neof_lock;
+    pthread_cond_t *neof_cond = ((Updater *) things)->neof_cond;
     FILE *fp;
     char buffer_line[BUFFER_SIZE];
     Vehicle vehic;
@@ -77,18 +93,19 @@ void *run_updater(){
             // ingresa sólo si no hay más que leer
             // por tanto, antes de cerrar ejecucion
             // indica que el archivo está leido completamenet
-            pthread_mutex_lock(&neof_lock);
-            neof = FALSE;
-            pthread_mutex_unlock(&neof_lock);
+            pthread_mutex_lock(neof_lock);
+            *neof = FALSE;
+            pthread_mutex_unlock(neof_lock);
             fclose(fp);
-            pthread_exit(NULL);
+            //pthread_exit(NULL);
+            break;
         }
 
         pthread_mutex_lock(&station_lock);
         while (station.free == 0){
             pthread_cond_wait(&station_cond, &station_lock);
-        } 
-        add_to_station(&(station.vehicle), STATION_SIZE, (void*) &vehic);
+        }
+        add_queue(&(station.vehicles_q), STATION_SIZE, (void*) &vehic);
         station.free -= 1;
         pthread_mutex_unlock(&station_lock);
     }
